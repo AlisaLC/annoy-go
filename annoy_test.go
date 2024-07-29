@@ -20,7 +20,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/AlisaLC/annoy"
+	annoy "github.com/AlisaLC/annoy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

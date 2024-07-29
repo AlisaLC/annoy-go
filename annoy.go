@@ -149,30 +149,26 @@ extern _Bool _wrap_AnnoyIndexDotProduct_onDiskBuild_annoy_db50064239c65d95(uintp
 */
 import "C"
 
-import "unsafe"
-import _ "runtime/cgo"
-import "sync"
-
+import (
+	_ "runtime/cgo"
+	"sync"
+	"unsafe"
+)
 
 type _ unsafe.Pointer
-
-
 
 var Swig_escape_always_false bool
 var Swig_escape_val interface{}
 
-
 type _swig_fnptr *byte
 type _swig_memberptr *byte
 
-
-func getSwigcptr(v interface { Swigcptr() uintptr }) uintptr {
+func getSwigcptr(v interface{ Swigcptr() uintptr }) uintptr {
 	if v == nil {
 		return 0
 	}
 	return v.Swigcptr()
 }
-
 
 type _ sync.Mutex
 
@@ -188,99 +184,93 @@ func Swig_malloc(arg1 int) (_swig_ret uintptr) {
 	return swig_r
 }
 
-
-
 type AnnoyVectorInt interface {
-  X_RawAnnoyVectorInt
-  ToSlice() []int32
-  Copy(in *[]int32)
-  InnerArray() []int32
-  Free()
+	X_RawAnnoyVectorInt
+	ToSlice() []int32
+	Copy(in *[]int32)
+	InnerArray() []int32
+	Free()
 }
 
 func NewAnnoyVectorInt() AnnoyVectorInt {
-    vec := NewX_RawAnnoyVectorInt()
-    return vec.(SwigcptrX_RawAnnoyVectorInt)
+	vec := NewX_RawAnnoyVectorInt()
+	return vec.(SwigcptrX_RawAnnoyVectorInt)
 }
 
 func (p SwigcptrX_RawAnnoyVectorInt) ToSlice() []int32 {
-    var out []int32
-    p.Copy(&out)
-    return out
+	var out []int32
+	p.Copy(&out)
+	return out
 }
 
-func (p SwigcptrX_RawAnnoyVectorInt) Copy(in *[]int32)  {
-    out := *in
-    inner := p.InnerArray()
-    if cap(out) >= len(inner) {
-        if len(out) != len(inner) {
-          out = out[:len(inner)]
-        }
-    } else {
-        out = make([]int32, len(inner))
-    }
+func (p SwigcptrX_RawAnnoyVectorInt) Copy(in *[]int32) {
+	out := *in
+	inner := p.InnerArray()
+	if cap(out) >= len(inner) {
+		if len(out) != len(inner) {
+			out = out[:len(inner)]
+		}
+	} else {
+		out = make([]int32, len(inner))
+	}
 
-    copy(out, inner)
-    *in = out
+	copy(out, inner)
+	*in = out
 }
 
 func (p SwigcptrX_RawAnnoyVectorInt) Free() {
-    DeleteX_RawAnnoyVectorInt(p)
+	DeleteX_RawAnnoyVectorInt(p)
 }
 
 func (p SwigcptrX_RawAnnoyVectorInt) InnerArray() []int32 {
 	length := p.Len()
-    ptr := unsafe.Pointer(p.ArrayPtr())
+	ptr := unsafe.Pointer(p.ArrayPtr())
 	return ((*[1 << 30]int32)(ptr))[:length:length]
 }
 
-
-
-
 type AnnoyVectorFloat interface {
-  X_RawAnnoyVectorFloat
-  ToSlice() []float32
-  Copy(in *[]float32)
-  InnerArray() []float32
-  Free()
+	X_RawAnnoyVectorFloat
+	ToSlice() []float32
+	Copy(in *[]float32)
+	InnerArray() []float32
+	Free()
 }
 
 func NewAnnoyVectorFloat() AnnoyVectorFloat {
-    vec := NewX_RawAnnoyVectorFloat()
-    return vec.(SwigcptrX_RawAnnoyVectorFloat)
+	vec := NewX_RawAnnoyVectorFloat()
+	return vec.(SwigcptrX_RawAnnoyVectorFloat)
 }
 
 func (p SwigcptrX_RawAnnoyVectorFloat) ToSlice() []float32 {
-    var out []float32
-    p.Copy(&out)
-    return out
+	var out []float32
+	p.Copy(&out)
+	return out
 }
 
-func (p SwigcptrX_RawAnnoyVectorFloat) Copy(in *[]float32)  {
-    out := *in
-    inner := p.InnerArray()
-    if cap(out) >= len(inner) {
-        if len(out) != len(inner) {
-          out = out[:len(inner)]
-        }
-    } else {
-        out = make([]float32, len(inner))
-    }
+func (p SwigcptrX_RawAnnoyVectorFloat) Copy(in *[]float32) {
+	out := *in
+	inner := p.InnerArray()
+	if cap(out) >= len(inner) {
+		if len(out) != len(inner) {
+			out = out[:len(inner)]
+		}
+	} else {
+		out = make([]float32, len(inner))
+	}
 
-    copy(out, inner)
-    *in = out
+	copy(out, inner)
+	*in = out
 }
 
 func (p SwigcptrX_RawAnnoyVectorFloat) Free() {
-    DeleteX_RawAnnoyVectorFloat(p)
+	DeleteX_RawAnnoyVectorFloat(p)
 }
 
 func (p SwigcptrX_RawAnnoyVectorFloat) InnerArray() []float32 {
-    length := p.Len()
-    ptr := unsafe.Pointer(p.ArrayPtr())
-    return ((*[1 << 30]float32)(ptr))[:length:length]
+	length := p.Len()
+	ptr := unsafe.Pointer(p.ArrayPtr())
+	return ((*[1 << 30]float32)(ptr))[:length:length]
 }
-
 
 type SwigcptrX_RawAnnoyVectorFloat uintptr
 
@@ -1537,5 +1527,3 @@ type AnnoyIndexDotProduct interface {
 	SwigIsAnnoyIndex()
 	SwigGetAnnoyIndex() AnnoyIndex
 }
-
-
