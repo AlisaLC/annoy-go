@@ -1,6 +1,6 @@
-module github.com/spotify/annoy
+module github.com/AlisaLC/annoy
 
-go 1.21.12
+go 1.21
 
 require github.com/stretchr/testify v1.9.0
 
