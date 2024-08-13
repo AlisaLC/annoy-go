@@ -5,10 +5,6 @@ import (
 	"math/rand"
 )
 
-const (
-	VArraySize = 65536
-)
-
 type Node struct {
 	Descendants int32
 	Children    []int32

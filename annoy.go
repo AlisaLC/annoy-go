@@ -8,12 +8,8 @@ import (
 	"sort"
 	"syscall"
 	"unsafe"
-)
 
-const (
-	DefaultSeed = 42
-	SeekSet     = 0
-	SeekEnd     = 2
+	"github.com/edsrzf/mmap-go"
 )
 
 type AnnoyIndexInterface interface {
@@ -42,7 +38,8 @@ type AnnoyIndex[D DistanceMetric] struct {
 	seed      uint64
 	loaded    bool
 	verbose   bool
-	fd        int
+	fd        *os.File
+	mmap      mmap.MMap
 	onDisk    bool
 	built     bool
 }
@@ -62,7 +59,7 @@ func NewAnnoyIndex[D DistanceMetric](f int, seed uint64) *AnnoyIndex[D] {
 		nodesSize: 0,
 	}
 
-	index.s = 12 + f*int(unsafe.Sizeof(float32(0))) // Size of each node
+	index.s = 12 + f*int(unsafe.Sizeof(float32(0)))
 	index.k = int32((index.s - 4) / 4)
 	index.reinitialize()
 
@@ -70,33 +67,30 @@ func NewAnnoyIndex[D DistanceMetric](f int, seed uint64) *AnnoyIndex[D] {
 }
 
 func (index *AnnoyIndex[D]) reinitialize() {
-	index.fd = 0
+	index.fd = nil
 	index.nodes = nil
 	index.loaded = false
 	index.nItems = 0
 	index.nNodes = 0
-	index.nodesSize = 0
+	index.nodesSize = 0 // Reinitialize the index state
 	index.onDisk = false
 	index.roots = []int32{}
-	index.seed = uint64(DefaultSeed)
 }
 
 func (index *AnnoyIndex[D]) Unload() {
-	if index.fd != 0 {
-		// Unmap the memory if it was memory-mapped
-		if err := syscall.Munmap(index.nodes); err != nil {
+	if index.fd != nil {
+		err := index.mmap.Unmap()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error unmapping memory: %v\n", err)
 		}
-		// Close the file descriptor
-		if err := syscall.Close(index.fd); err != nil {
+		err = index.fd.Close()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error closing file descriptor: %v\n", err)
 		}
 	} else if index.nodes != nil {
-		// If the nodes were not memory-mapped, just set the pointer to nil
 		index.nodes = nil
 	}
 
-	// Reinitialize the index state
 	index.reinitialize()
 
 	if index.verbose {
@@ -105,30 +99,31 @@ func (index *AnnoyIndex[D]) Unload() {
 }
 
 func (index *AnnoyIndex[D]) Load(filename string, prefault bool) error {
-	fd, err := syscall.Open(filename, syscall.O_RDONLY, 0400)
+	f, err := os.OpenFile(filename, os.O_RDONLY, 0400)
 	if err != nil {
 		return fmt.Errorf("Unable to open: %v", err)
 	}
-	index.fd = fd
+	index.fd = f
 
-	size, err := syscall.Seek(fd, 0, SeekEnd)
+	fi, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("Unable to get size: %v", err)
 	}
+	size := fi.Size()
 	if size == 0 {
 		return fmt.Errorf("Size of file is zero")
 	}
 	if size%int64(index.s) != 0 {
 		return fmt.Errorf("Index size is not a multiple of vector size. Ensure you are opening using the same metric you used to create the index.")
 	}
-	syscall.Seek(fd, 0, SeekSet)
 
 	flags := syscall.MAP_SHARED
 	if prefault {
 		flags |= syscall.MAP_POPULATE
 	}
 
-	nodes, err := syscall.Mmap(fd, 0, int(size), syscall.PROT_READ, flags)
+	nodes, err := mmap.Map(f, mmap.RDONLY, 0)
+	index.mmap = nodes
 	if err != nil {
 		return fmt.Errorf("Unable to mmap: %v", err)
 	}

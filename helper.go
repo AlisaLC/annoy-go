@@ -9,19 +9,16 @@ import (
 	"syscall"
 )
 
-// A Pair is something we manage in a priority queue.
 type Pair struct {
-	first  float32 // The priority of the node.
-	second int32   // The node index.
+	first  float32
+	second int32
 }
 
-// A PriorityQueue implements heap.Interface and holds Pairs.
 type PriorityQueue []*Pair
 
 func (pq PriorityQueue) Len() int { return len(pq) }
 
 func (pq PriorityQueue) Less(i, j int) bool {
-	// We want the priority queue to pop the smallest priority, so we use Less here.
 	if pq[i].first == pq[j].first {
 		return pq[i].second > pq[j].second
 	}
