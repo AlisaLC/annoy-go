@@ -6,7 +6,6 @@ import (
 	"math"
 	"os"
 	"sort"
-	"syscall"
 	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
@@ -20,7 +19,6 @@ type AnnoyIndexInterface interface {
 	GetNnsByVector(v []float32, n, searchK int) ([]int, []float32)
 	GetNItems() int
 	GetNTrees() int
-	Verbose(v bool)
 	GetItem(item int) []float32
 	SetSeed(seed uint64)
 }
@@ -37,18 +35,17 @@ type AnnoyIndex[D DistanceMetric] struct {
 	k         int32
 	seed      uint64
 	loaded    bool
-	verbose   bool
 	fd        *os.File
 	mmap      mmap.MMap
 	onDisk    bool
 	built     bool
+	cache     map[int32]*Node
 }
 
 func NewAnnoyIndex[D DistanceMetric](f int, seed uint64) *AnnoyIndex[D] {
 	index := &AnnoyIndex[D]{
 		f:         f,
 		seed:      seed,
-		verbose:   false,
 		built:     false,
 		nodes:     nil,
 		nItems:    0,
@@ -57,6 +54,7 @@ func NewAnnoyIndex[D DistanceMetric](f int, seed uint64) *AnnoyIndex[D] {
 		loaded:    false,
 		roots:     []int32{},
 		nodesSize: 0,
+		cache:     make(map[int32]*Node),
 	}
 
 	index.s = 12 + f*int(unsafe.Sizeof(float32(0)))
@@ -72,33 +70,33 @@ func (index *AnnoyIndex[D]) reinitialize() {
 	index.loaded = false
 	index.nItems = 0
 	index.nNodes = 0
-	index.nodesSize = 0 // Reinitialize the index state
+	index.nodesSize = 0
 	index.onDisk = false
 	index.roots = []int32{}
 }
 
-func (index *AnnoyIndex[D]) Unload() {
+func (index *AnnoyIndex[D]) Unload() error {
 	if index.fd != nil {
-		err := index.mmap.Unmap()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error unmapping memory: %v\n", err)
+		if index.mmap != nil {
+			err := index.mmap.Unmap()
+			if err != nil {
+				return fmt.Errorf("Error unmapping memory: %v\n", err)
+			}
+			index.mmap = nil
 		}
-		err = index.fd.Close()
+		err := index.fd.Close()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error closing file descriptor: %v\n", err)
+			return fmt.Errorf("Error closing file descriptor: %v\n", err)
 		}
 	} else if index.nodes != nil {
 		index.nodes = nil
 	}
 
 	index.reinitialize()
-
-	if index.verbose {
-		fmt.Fprintln(os.Stderr, "unloaded")
-	}
+	return nil
 }
 
-func (index *AnnoyIndex[D]) Load(filename string, prefault bool) error {
+func (index *AnnoyIndex[D]) Load(filename string, memory bool) error {
 	f, err := os.OpenFile(filename, os.O_RDONLY, 0400)
 	if err != nil {
 		return fmt.Errorf("Unable to open: %v", err)
@@ -117,17 +115,23 @@ func (index *AnnoyIndex[D]) Load(filename string, prefault bool) error {
 		return fmt.Errorf("Index size is not a multiple of vector size. Ensure you are opening using the same metric you used to create the index.")
 	}
 
-	flags := syscall.MAP_SHARED
-	if prefault {
-		flags |= syscall.MAP_POPULATE
+	if memory {
+		nodes := make([]byte, size)
+		_, err = f.Read(nodes)
+		index.mmap = nil
+		if err != nil {
+			return fmt.Errorf("Unable to read: %v", err)
+		}
+		index.nodes = nodes
+	} else {
+		nodes, err := mmap.Map(f, mmap.RDONLY, 0)
+		index.mmap = nodes
+		if err != nil {
+			return fmt.Errorf("Unable to mmap: %v", err)
+		}
+		index.nodes = nodes
 	}
 
-	nodes, err := mmap.Map(f, mmap.RDONLY, 0)
-	index.mmap = nodes
-	if err != nil {
-		return fmt.Errorf("Unable to mmap: %v", err)
-	}
-	index.nodes = nodes
 	index.nNodes = int32(size / int64(index.s))
 
 	index.roots = []int32{}
@@ -148,9 +152,6 @@ func (index *AnnoyIndex[D]) Load(filename string, prefault bool) error {
 	index.loaded = true
 	index.built = true
 	index.nItems = m
-	if index.verbose {
-		fmt.Fprintf(os.Stderr, "found %d roots with degree %d\n", len(index.roots), m)
-	}
 	return nil
 }
 
@@ -175,10 +176,6 @@ func (index *AnnoyIndex[D]) GetNTrees() int {
 	return int(len(index.roots))
 }
 
-func (index *AnnoyIndex[D]) Verbose(v bool) {
-	index.verbose = v
-}
-
 func (index *AnnoyIndex[D]) GetItem(item int32) []float32 {
 	m := index.getNode(item)
 	v := make([]float32, index.f)
@@ -191,7 +188,19 @@ func (index *AnnoyIndex[D]) SetSeed(seed uint64) {
 }
 
 func (index *AnnoyIndex[D]) getNode(i int32) *Node {
-	return GetNodePtr(index.nodes, index.s, i)
+	if index.mmap != nil {
+		return GetNodePtr(index.nodes, index.s, i)
+	}
+	node, ok := index.cache[i]
+	if ok {
+		return node
+	}
+	node = GetNodePtr(index.nodes, index.s, i)
+	index.cache[i] = node
+	if node.V != nil {
+		index.distance.InitNode(node, index.f)
+	}
+	return node
 }
 
 func (index *AnnoyIndex[D]) getAllNns(v []float32, n, searchK int) ([]int32, []float32) {
@@ -227,16 +236,17 @@ func (index *AnnoyIndex[D]) getAllNns(v []float32, n, searchK int) ([]int32, []f
 		}
 	}
 
-	sort.Slice(nns, func(i, j int) bool { return nns[i] < nns[j] })
-	nnsDist := []Pair{}
-	var last int32 = -1
+	nnSet := make(map[int32]struct{})
 	for _, j := range nns {
-		if j == last {
-			continue
-		}
-		last = j
+		nnSet[j] = struct{}{}
+	}
+
+	nnsDist := make([]Pair, len(nnSet))
+	i := 0
+	for j := range nnSet {
 		if index.getNode(j).Descendants == 1 {
-			nnsDist = append(nnsDist, Pair{index.distance.Distance(vNode, index.getNode(j), index.f), j})
+			nnsDist[i] = Pair{index.distance.Distance(vNode, index.getNode(j), index.f), j}
+			i += 1
 		}
 	}
 

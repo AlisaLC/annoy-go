@@ -72,13 +72,20 @@ func GetNodePtr(nodes []byte, size int, i int32) *Node {
 	arrSize := (size - 12) / 4
 	node := Node{}
 	node.Descendants = int32(binary.LittleEndian.Uint32(nodes[size*int(i) : size*int(i)+4]))
-	node.Children = make([]int32, arrSize+2)
-	for j := 0; j < arrSize+2; j++ {
-		node.Children[j] = int32(binary.LittleEndian.Uint32(nodes[size*int(i)+4+4*j : size*int(i)+8+4*j]))
-	}
-	node.V = make([]float32, arrSize)
-	for j := 0; j < arrSize; j++ {
-		node.V[j] = math.Float32frombits(binary.LittleEndian.Uint32(nodes[size*int(i)+12+4*j : size*int(i)+16+4*j]))
+	if node.Descendants > 2 && node.Descendants <= int32(arrSize)+2 {
+		node.Children = make([]int32, arrSize+2)
+		for j := 0; j < arrSize+2; j++ {
+			node.Children[j] = int32(binary.LittleEndian.Uint32(nodes[size*int(i)+4+4*j : size*int(i)+8+4*j]))
+		}
+	} else {
+		node.Children = make([]int32, 2)
+		for j := 0; j < 2; j++ {
+			node.Children[j] = int32(binary.LittleEndian.Uint32(nodes[size*int(i)+4+4*j : size*int(i)+8+4*j]))
+		}
+		node.V = make([]float32, arrSize)
+		for j := 0; j < arrSize; j++ {
+			node.V[j] = math.Float32frombits(binary.LittleEndian.Uint32(nodes[size*int(i)+12+4*j : size*int(i)+16+4*j]))
+		}
 	}
 	return &node
 }
