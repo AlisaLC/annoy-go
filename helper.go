@@ -2,11 +2,7 @@ package annoy
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
-	"math/rand"
-	"os"
-	"syscall"
 )
 
 type Pair struct {
@@ -46,28 +42,6 @@ func (pq *PriorityQueue) Top() *Pair {
 	return (*pq)[0]
 }
 
-func PrintError(msg string) {
-	fmt.Fprintf(os.Stderr, msg)
-}
-
-func RemapMemoryAndTruncate(data *[]byte, fd int, oldSize, newSize int64) bool {
-	if err := syscall.Munmap(*data); err != nil {
-		return false
-	}
-
-	if err := syscall.Ftruncate(fd, newSize); err != nil {
-		return false
-	}
-
-	newData, err := syscall.Mmap(fd, 0, int(newSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-	if err != nil {
-		return false
-	}
-
-	*data = newData
-	return true
-}
-
 func GetNodePtr(nodes []byte, size int, i int32) *Node {
 	arrSize := (size - 12) / 4
 	node := Node{}
@@ -96,48 +70,4 @@ func Dot(x, y []float32, f int) float32 {
 		s += x[z] * y[z]
 	}
 	return s
-}
-
-func TwoMeans[Distance DistanceMetric](distance DistanceMetric, nodes []*Node, f int, random *rand.Rand, cosine bool, p, q *Node) {
-	iterationSteps := 200
-	count := len(nodes)
-
-	i := random.Intn(count)
-	j := random.Intn(count - 1)
-	if j >= i {
-		j++
-	}
-
-	distance.CopyNode(p, nodes[i], f)
-	distance.CopyNode(q, nodes[j], f)
-
-	if cosine {
-		distance.Normalize(p, f)
-		distance.Normalize(q, f)
-	}
-	distance.InitNode(p, f)
-	distance.InitNode(q, f)
-
-	ic, jc := 1, 1
-	for l := 0; l < iterationSteps; l++ {
-		k := random.Intn(count)
-		di := float32(ic) * distance.Distance(p, nodes[k], f)
-		dj := float32(jc) * distance.Distance(q, nodes[k], f)
-		norm := float32(1)
-		if cosine {
-			norm = distance.GetNorm(nodes[k], f)
-		}
-		if !(norm > float32(0)) {
-			continue
-		}
-		if di < dj {
-			distance.UpdateMean(p, nodes[k], norm, ic, f)
-			distance.InitNode(p, f)
-			ic++
-		} else if dj < di {
-			distance.UpdateMean(q, nodes[k], norm, jc, f)
-			distance.InitNode(q, f)
-			jc++
-		}
-	}
 }

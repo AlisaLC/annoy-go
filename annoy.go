@@ -6,58 +6,46 @@ import (
 	"math"
 	"os"
 	"sort"
-	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
 )
 
 type AnnoyIndexInterface interface {
-	Unload()
-	Load(filename string, prefault bool) error
+	Unload() error
+	Load(filename string, memory bool) error
 	GetDistance(i, j int) float32
 	GetNnsByItem(item int, n, searchK int) ([]int, []float32)
 	GetNnsByVector(v []float32, n, searchK int) ([]int, []float32)
 	GetNItems() int
 	GetNTrees() int
 	GetItem(item int) []float32
-	SetSeed(seed uint64)
 }
 
 type AnnoyIndex[D DistanceMetric] struct {
-	distance  D
-	f         int
-	s         int
-	nItems    int32
-	nodes     []byte
-	nNodes    int32
-	nodesSize int32
-	roots     []int32
-	k         int32
-	seed      uint64
-	loaded    bool
-	fd        *os.File
-	mmap      mmap.MMap
-	onDisk    bool
-	built     bool
-	cache     map[int32]*Node
+	distance D
+	f        int
+	s        int
+	nItems   int32
+	nodes    []byte
+	nNodes   int32
+	roots    []int32
+	k        int32
+	fd       *os.File
+	mmap     mmap.MMap
+	cache    map[int32]*Node
 }
 
-func NewAnnoyIndex[D DistanceMetric](f int, seed uint64) *AnnoyIndex[D] {
+func NewAnnoyIndex[D DistanceMetric](f int) *AnnoyIndex[D] {
 	index := &AnnoyIndex[D]{
-		f:         f,
-		seed:      seed,
-		built:     false,
-		nodes:     nil,
-		nItems:    0,
-		nNodes:    0,
-		onDisk:    false,
-		loaded:    false,
-		roots:     []int32{},
-		nodesSize: 0,
-		cache:     make(map[int32]*Node),
+		f:      f,
+		nodes:  nil,
+		nItems: 0,
+		nNodes: 0,
+		roots:  []int32{},
+		cache:  make(map[int32]*Node),
 	}
 
-	index.s = 12 + f*int(unsafe.Sizeof(float32(0)))
+	index.s = 12 + f*4
 	index.k = int32((index.s - 4) / 4)
 	index.reinitialize()
 
@@ -67,11 +55,8 @@ func NewAnnoyIndex[D DistanceMetric](f int, seed uint64) *AnnoyIndex[D] {
 func (index *AnnoyIndex[D]) reinitialize() {
 	index.fd = nil
 	index.nodes = nil
-	index.loaded = false
 	index.nItems = 0
 	index.nNodes = 0
-	index.nodesSize = 0
-	index.onDisk = false
 	index.roots = []int32{}
 }
 
@@ -149,14 +134,12 @@ func (index *AnnoyIndex[D]) Load(filename string, memory bool) error {
 	if len(index.roots) > 1 && index.getNode(index.roots[0]).Children[0] == index.getNode(index.roots[len(index.roots)-1]).Children[0] {
 		index.roots = index.roots[:len(index.roots)-1]
 	}
-	index.loaded = true
-	index.built = true
 	index.nItems = m
 	return nil
 }
 
 func (index *AnnoyIndex[D]) GetDistance(i, j int32) float32 {
-	return index.distance.NormalizedDistance(index.getNode(i), index.getNode(j), index.f)
+	return index.distance.NormalizeDistance(index.distance.Distance(index.getNode(i), index.getNode(j), index.f))
 }
 
 func (index *AnnoyIndex[D]) GetNnsByItem(item int32, n, searchK int) ([]int32, []float32) {
@@ -181,10 +164,6 @@ func (index *AnnoyIndex[D]) GetItem(item int32) []float32 {
 	v := make([]float32, index.f)
 	copy(v, m.V[:index.f])
 	return v
-}
-
-func (index *AnnoyIndex[D]) SetSeed(seed uint64) {
-	index.seed = seed
 }
 
 func (index *AnnoyIndex[D]) getNode(i int32) *Node {
